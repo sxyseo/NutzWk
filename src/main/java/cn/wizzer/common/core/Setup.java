@@ -1,13 +1,19 @@
 package cn.wizzer.common.core;
 
-import cn.wizzer.common.base.Globals;
-import cn.wizzer.modules.models.sys.*;
-import net.sf.ehcache.CacheManager;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.InputStreamReader;
+import java.nio.charset.Charset;
+import java.sql.Connection;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.apache.shiro.crypto.RandomNumberGenerator;
 import org.apache.shiro.crypto.SecureRandomNumberGenerator;
 import org.apache.shiro.crypto.hash.Sha256Hash;
 import org.nutz.dao.Chain;
 import org.nutz.dao.Cnd;
+import org.nutz.dao.ConnCallback;
 import org.nutz.dao.Dao;
 import org.nutz.dao.Sqls;
 import org.nutz.dao.impl.FileSqlManager;
@@ -17,14 +23,25 @@ import org.nutz.integration.quartz.QuartzJob;
 import org.nutz.integration.quartz.QuartzManager;
 import org.nutz.ioc.Ioc;
 import org.nutz.lang.Encoding;
+import org.nutz.lang.Files;
 import org.nutz.lang.Strings;
 import org.nutz.log.Log;
 import org.nutz.log.Logs;
 import org.nutz.mvc.NutConfig;
 import org.quartz.Scheduler;
 
-import java.nio.charset.Charset;
-import java.util.*;
+import cn.wizzer.common.base.Globals;
+import cn.wizzer.common.plugin.IPlugin;
+import cn.wizzer.common.plugin.PluginMaster;
+import cn.wizzer.modules.models.sys.Sys_config;
+import cn.wizzer.modules.models.sys.Sys_menu;
+import cn.wizzer.modules.models.sys.Sys_plugin;
+import cn.wizzer.modules.models.sys.Sys_role;
+import cn.wizzer.modules.models.sys.Sys_route;
+import cn.wizzer.modules.models.sys.Sys_task;
+import cn.wizzer.modules.models.sys.Sys_unit;
+import cn.wizzer.modules.models.sys.Sys_user;
+import net.sf.ehcache.CacheManager;
 
 /**
  * Created by wizzer on 2016/6/21.
@@ -42,30 +59,54 @@ public class Setup implements org.nutz.mvc.Setup {
             Dao dao = ioc.get(Dao.class);
             // 初始化数据表
             initSysData(config, dao);
-            // 检查一下Ehcache CacheManager 是否正常.
-            CacheManager cacheManager = ioc.get(CacheManager.class);
-            log.debug("Ehcache CacheManager = " + cacheManager);
-            /* redis测试
-            JedisPool jedisPool = ioc.get(JedisPool.class);
-            try (Jedis jedis = jedisPool.getResource()) {
-                String updateCount = jedis.set("_big_fish", "Hello Word!!");
-                log.debug("1.redis say : " + updateCount);
-                updateCount = jedis.get("_big_fish");
-                log.debug("2.redis say : " + updateCount);
-            } finally {}
-
-            RedisService redis = ioc.get(RedisService.class);
-            redis.set("hi", "wendal,rekoe hoho..");
-            log.debug("redis say again : " + redis.get("hi"));
-            */
             // 初始化系统变量
             initSysSetting(config, dao);
             // 初始化定时任务
             initSysTask(config, dao);
             // 初始化自定义路由
             initSysRoute(config, dao);
+            // 初始化热插拔插件
+            initSysPlugin(config, dao);
+            // 检查一下Ehcache CacheManager 是否正常,单机部署要让重启登录不失效需要执行一下
+            CacheManager cacheManager = ioc.get(CacheManager.class);
+            log.debug("Ehcache CacheManager = " + cacheManager);
+            log.info("\n _  _ _   _ _____ ______      ___  __\n" +
+                    "| \\| | | | |_   _|_  /\\ \\    / / |/ /\n" +
+                    "| .` | |_| | | |  / /  \\ \\/\\/ /| ' < \n" +
+                    "|_|\\_|\\___/  |_| /___|  \\_/\\_/ |_|\\_\\");
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    /**
+     * 初始化热插拔插件
+     *
+     * @param config
+     * @param dao
+     */
+    private void initSysPlugin(NutConfig config, Dao dao) {
+        try {
+            PluginMaster pluginMaster = config.getIoc().get(PluginMaster.class);
+            List<Sys_plugin> list = dao.query(Sys_plugin.class, Cnd.where("disabled", "=", false));
+            for (Sys_plugin sysPlugin : list) {
+                String name = sysPlugin.getPath().substring(sysPlugin.getPath().indexOf(".")).toLowerCase();
+                File file = new File(Globals.AppRoot + sysPlugin.getPath());
+                String[] p = new String[]{};
+                IPlugin plugin;
+                if (".jar".equals(name)) {
+                    plugin = pluginMaster.buildFromJar(file, sysPlugin.getClassName());
+                } else {
+                    byte[] buf = Files.readBytes(file);
+                    plugin = pluginMaster.build(sysPlugin.getClassName(), buf);
+                }
+                if (!Strings.isBlank(sysPlugin.getArgs())) {
+                    p = org.apache.commons.lang3.StringUtils.split(sysPlugin.getArgs(), ",");
+                }
+                pluginMaster.register(sysPlugin.getCode(), plugin, p);
+            }
+        } catch (Exception e) {
+            log.debug("plugin load error", e);
         }
     }
 
@@ -95,6 +136,64 @@ public class Setup implements org.nutz.mvc.Setup {
      * @param dao
      */
     private void initSysTask(NutConfig config, Dao dao) {
+        if (!dao.exists("SYS_QRTZ_LOCKS")) {
+            String path = "tables_mysql_innodb.sql";
+            switch (dao.meta().getType()) {
+            case ORACLE:
+                path = "tables_oracle.sql";
+                break;
+            case PSQL:
+                path = "tables_postgres.sql";
+                break;
+            case SQLSERVER:
+                path = "tables_sqlServer.sql";
+                break;
+            default:
+                break;
+            }
+            try {
+                String _path = path;
+                dao.run(new ConnCallback() {
+                    public void invoke(Connection conn) throws Exception {
+                        InputStreamReader reader = new InputStreamReader(getClass().getClassLoader().getResourceAsStream("db_quartz/" + _path));
+                        BufferedReader br = new BufferedReader(reader);
+                        StringBuilder sb = new StringBuilder();
+                        while (br.ready()) {
+                            String line = br.readLine();
+                            if (line == null)
+                                break;
+                            if (Strings.isBlank(line))
+                                continue;
+                            if (line.startsWith("#"))
+                                continue;
+                            if (line.startsWith("--"))
+                                continue;
+                            line = line.trim();
+                            sb.append(" ").append(line.toUpperCase());
+                            if (line.endsWith(";")) {
+                                sb.setLength(sb.length() - 1);
+                                log.info("Quartz SQL= " + sb.toString());
+                                try {
+                                    conn.prepareStatement(sb.toString()).execute();
+                                }
+                                catch (Throwable e) {
+                                }
+                                
+                                sb.setLength(0);
+                            }
+                        }
+                        if (sb.length() > 0) {
+                            sb.setLength(sb.length() - 1);
+                            log.info("Quartz SQL= " + sb.toString());
+                            conn.prepareStatement(sb.toString()).execute();
+                        }
+                    }
+                });
+            }
+            catch (Exception e) {
+                log.info("love!!!", e);
+            }
+        }
         QuartzManager quartzManager = config.getIoc().get(QuartzManager.class);
         quartzManager.clear();
         if (0 == dao.count(Sys_task.class)) {
@@ -108,7 +207,7 @@ public class Setup implements org.nutz.mvc.Setup {
             task.setNote("微信号：wizzer | 欢迎发送红包以示支持，多谢。。");
             dao.insert(task);
         }
-        List<Sys_task> taskList = dao.query(Sys_task.class, Cnd.where("disabled", "=", 0));
+        List<Sys_task> taskList = dao.query(Sys_task.class, Cnd.where("disabled", "=", false));
         for (Sys_task sysTask : taskList) {
             try {
                 QuartzJob qj = new QuartzJob();
@@ -664,6 +763,52 @@ public class Setup implements org.nutz.mvc.Setup {
             menu.setParentId(d.getId());
             menu.setType("data");
             Sys_menu d3 = dao.insert(menu);
+            menu = new Sys_menu();
+            menu.setDisabled(false);
+            menu.setPath("000100010011");
+            menu.setName("插件管理");
+            menu.setAliasName("Plugin");
+            menu.setLocation(0);
+            menu.setHref("/platform/sys/plugin");
+            menu.setTarget("data-pjax");
+            menu.setIsShow(true);
+            menu.setPermission("sys.manager.plugin");
+            menu.setParentId(m1.getId());
+            menu.setType("menu");
+            Sys_menu p = dao.insert(menu);
+            menu = new Sys_menu();
+            menu.setDisabled(false);
+            menu.setPath("0001000100110001");
+            menu.setName("添加插件");
+            menu.setAliasName("Add");
+            menu.setLocation(1);
+            menu.setIsShow(false);
+            menu.setPermission("sys.manager.plugin.add");
+            menu.setParentId(p.getId());
+            menu.setType("data");
+            Sys_menu p1 = dao.insert(menu);
+            menu = new Sys_menu();
+            menu.setDisabled(false);
+            menu.setPath("0001000100110002");
+            menu.setName("启用禁用");
+            menu.setAliasName("Update");
+            menu.setLocation(2);
+            menu.setIsShow(false);
+            menu.setPermission("sys.manager.plugin.update");
+            menu.setParentId(p.getId());
+            menu.setType("data");
+            Sys_menu p2 = dao.insert(menu);
+            menu = new Sys_menu();
+            menu.setDisabled(false);
+            menu.setPath("0001000100110003");
+            menu.setName("删除插件");
+            menu.setAliasName("Delete");
+            menu.setLocation(3);
+            menu.setIsShow(false);
+            menu.setPermission("sys.manager.plugin.delete");
+            menu.setParentId(p.getId());
+            menu.setType("data");
+            Sys_menu p3 = dao.insert(menu);
             //初始化角色
             Sys_role role = new Sys_role();
             role.setName("公共角色");
@@ -706,26 +851,15 @@ public class Setup implements org.nutz.mvc.Setup {
             //不同的插入数据方式(安全)
             dao.insert("sys_user_unit", Chain.make("userId", dbuser.getId()).add("unitId", dbunit.getId()));
             dao.insert("sys_user_role", Chain.make("userId", dbuser.getId()).add("roleId", dbrole.getId()));
-            //执行自定义SQL,系统模块菜单关联到角色
-            dao.execute(Sqls.create("INSERT INTO sys_role_menu(roleId,menuId) SELECT @roleId,id FROM sys_menu WHERE path LIKE '0001%'").setParam("roleId", dbrole.getId()));
             //执行微信菜单SQL脚本
-            FileSqlManager fm = new FileSqlManager("db/init_menu_weixin.sql");
+            FileSqlManager fm = new FileSqlManager("db/");
             List<Sql> sqlList = fm.createCombo(fm.keys());
             Sql[] sqls = sqlList.toArray(new Sql[sqlList.size()]);
             for (Sql sql : sqls) {
                 dao.execute(sql);
             }
-            //执行CMS菜单SQL脚本
-            FileSqlManager fm_cms = new FileSqlManager("db/init_menu_cms.sql");
-            List<Sql> sqlList_cms = fm_cms.createCombo(fm_cms.keys());
-            Sql[] sqls_cms = sqlList_cms.toArray(new Sql[sqlList_cms.size()]);
-            for (Sql sql : sqls_cms) {
-                dao.execute(sql);
-            }
-            //微信模块菜单关联到角色
-            dao.execute(Sqls.create("INSERT INTO sys_role_menu(roleId,menuId) SELECT @roleId,id FROM sys_menu WHERE path LIKE '0002%'").setParam("roleId", dbrole.getId()));
-            //CMS模块菜单关联到角色
-            dao.execute(Sqls.create("INSERT INTO sys_role_menu(roleId,menuId) SELECT @roleId,id FROM sys_menu WHERE path LIKE '0003%'").setParam("roleId", dbrole.getId()));
+            //菜单关联到角色
+            dao.execute(Sqls.create("INSERT INTO sys_role_menu(roleId,menuId) SELECT @roleId,id FROM sys_menu").setParam("roleId", dbrole.getId()));
         }
     }
 

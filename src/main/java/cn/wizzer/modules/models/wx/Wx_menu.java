@@ -50,6 +50,16 @@ public class Wx_menu extends Model implements Serializable {
     private String url;
 
     @Column
+    @Comment("小程序appid")
+    @ColDefine(type = ColType.VARCHAR, width = 255)
+    private String appid;
+
+    @Column
+    @Comment("小程序入口页")
+    @ColDefine(type = ColType.VARCHAR, width = 255)
+    private String pagepath;
+
+    @Column
     @Comment("排序字段")
     @Prev({
             @SQL(db= DB.MYSQL,value = "SELECT IFNULL(MAX(location),0)+1 FROM wx_menu"),
@@ -66,7 +76,7 @@ public class Wx_menu extends Model implements Serializable {
     @ColDefine(type = ColType.VARCHAR, width = 32)
     private String wxid;
 
-    @One(target = Wx_config.class, field = "wxid")
+    @One(field = "wxid")
     private Wx_config wxConfig;
 
     public String getId() {
@@ -155,5 +165,21 @@ public class Wx_menu extends Model implements Serializable {
 
     public void setWxConfig(Wx_config wxConfig) {
         this.wxConfig = wxConfig;
+    }
+
+    public String getAppid() {
+        return appid;
+    }
+
+    public void setAppid(String appid) {
+        this.appid = appid;
+    }
+
+    public String getPagepath() {
+        return pagepath;
+    }
+
+    public void setPagepath(String pagepath) {
+        this.pagepath = pagepath;
     }
 }

@@ -7,7 +7,7 @@ NutzWk 基于Nutz的开源企业级开发框架
 
 开发计划:
 
-* NutzWk 4.0.x   前后端分离版 (vue + nutz + dubbo) **开发中..**
+* NutzWk 4.0.x   分布式版本 (beetl / beetl+velocity)
 * NutzWk 3.3.x   CMS+微信+系统+权限+常用功能封装 (beetl / beetl+velocity)
 * NutzWk 2.0.x   试验版(不建议使用)
 * NutzWk 1.0.x   传统版(velocity 支持IE6)
@@ -16,17 +16,11 @@ NutzWk 基于Nutz的开源企业级开发框架
 
 QQ交流群: 68428921
 
-欢迎付费定制，二次开发
-=======
-QQ: 11624317
-
-微信：wizzer
-
 在线演示地址
 ======
 https://nutzwk.wizzer.cn/                 NutzWk v3.x
 
-https://vue.wizzer.cn                     NutzWk v4.x
+https://vue.wizzer.cn                     NutzWk v3.x-vue
 
 https://github.com/Wizzercn/NodeWk       Node.js版源码
 
@@ -35,9 +29,8 @@ https://github.com/Wizzercn/NodeWk       Node.js版源码
 
 NutzWk 3.x 运行环境：
 *   JDK 8
-*   Tomcat 8
-*   Maven 3.3.9
-*   Nutz v1.r.58
+*   Tomcat 8.x +
+*   Maven 3.3.x +
 
 NutzWk 3.x 新特性：
 *   集成Shiro权限框架
@@ -47,24 +40,27 @@ NutzWk 3.x 新特性：
 *   支持注解式事务
 *   支持动作链
 *   支持注解式日志
-*   支持插件式加载
+*   支持自定义路由
+*   支持插件热插拔
+*   支持API Token及应用管理
 *   集成Email服务
 *   集成Quartz定时任务
 *   集成Lucene搜索引擎
 *   集成Beetl/Velocity模板引擎
 *   后台管理界面采用Pjax+Bootstrap
-*   自定义路由
-*   API Token 及应用管理
 
 
 使用说明：
 *   创建空的数据库
-*   修改数据库连接 /resources/config/custom/db.properties
+*   修改数据库连接 src/main/resources/config/custom/db.properties
 *   项目使用Maven构建，IDEA/Eclipse直接打开，等待包下载完毕
 *   启动时自动建表
-*   http://127.0.0.1/sysadmin
+*   http://127.0.0.1/sysadmin 若部署在非根路径,请加上ContextPath
 *   用户名：superadmin  密码：1
 
+若下载jar失败,请查阅 http://nutzam.com/core/basic/maven.html
+
+若非mysql数据库,请修改quartz的数据库类型 src/main/resources/quartz.properties 里面的org.quartz.jobStore.driverDelegateClass
 
 代码生成器【IDEA插件】
 ======
@@ -98,3 +94,12 @@ NutzWk 1.0 含Activiti工作流的源码在这里： https://github.com/wendal/w
 NutzWk v3.x 运行截图
 ======
 ![主界面截图](nutzwk_home.png)
+
+捐助
+======
+如果您觉得 NutzWk 对你有帮助，欢迎给予一定的捐助来维持项目的长期发展。
+
+### 支付宝扫码捐赠
+![支付宝扫码捐赠](alipay.png)
+
+捐赠清单：https://nutzwk.wizzer.cn/private/pm/info

@@ -85,7 +85,7 @@ public class WxMenuController {
     @RequiresAuthentication
     public void add(String wxid, HttpServletRequest req) {
         req.setAttribute("wxid", wxid);
-        req.setAttribute("menus", wxMenuService.query(Cnd.where("wxid", "=", wxid).and("parentId", "=", "").asc("location")));
+        req.setAttribute("menus", wxMenuService.query(Cnd.where("wxid", "=", wxid).and(Cnd.exps("parentId", "=", "").or("parentId", "is", null)).asc("location")));
         req.setAttribute("config", wxConfigService.fetch(wxid));
     }
 
@@ -145,7 +145,7 @@ public class WxMenuController {
     public Object edit(String id, HttpServletRequest req) {
         Wx_menu menu = wxMenuService.fetch(id);
         req.setAttribute("config", wxConfigService.fetch(menu.getWxid()));
-        return wxMenuService.fetchLinks(menu,"wxConfig");
+        return wxMenuService.fetchLinks(menu, "wxConfig");
     }
 
     @At
@@ -215,6 +215,12 @@ public class WxMenuController {
                                 xm2.setType(secondMenu.getMenuType());
                                 xm2.setKey(secondMenu.getMenuKey());
                                 xm2.setName(secondMenu.getMenuName());
+                            } else if ("miniprogram".equals(secondMenu.getMenuType())) {
+                                xm2.setType(secondMenu.getMenuType());
+                                xm2.setName(secondMenu.getMenuName());
+                                xm2.setUrl(secondMenu.getUrl());
+                                xm2.setAppid(secondMenu.getAppid());
+                                xm2.setPagepath(secondMenu.getPagepath());
                             } else {
                                 xm2.setName(secondMenu.getMenuName());
                                 xm2.setType("click");
@@ -235,6 +241,12 @@ public class WxMenuController {
                         xm2.setType(firstMenu.getMenuType());
                         xm2.setKey(firstMenu.getMenuKey());
                         xm2.setName(firstMenu.getMenuName());
+                    } else if ("miniprogram".equals(firstMenu.getMenuType())) {
+                        xm2.setType(firstMenu.getMenuType());
+                        xm2.setName(firstMenu.getMenuName());
+                        xm2.setUrl(firstMenu.getUrl());
+                        xm2.setAppid(firstMenu.getAppid());
+                        xm2.setPagepath(firstMenu.getPagepath());
                     } else {
                         xm2.setName(firstMenu.getMenuName());
                         xm2.setType("click");
@@ -244,7 +256,7 @@ public class WxMenuController {
                 }
             }
             WxResp wxResp = wxApi2.menu_create(m1);
-            if(wxResp.errcode()!=0){
+            if (wxResp.errcode() != 0) {
                 return Result.error(wxResp.errmsg());
             }
             return Result.success("system.success");

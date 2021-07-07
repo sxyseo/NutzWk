@@ -2,6 +2,7 @@ package cn.wizzer.modules.controllers.platform.sys;
 
 import cn.apiclub.captcha.Captcha;
 import cn.wizzer.common.base.Result;
+import cn.wizzer.common.util.StringUtil;
 import cn.wizzer.common.services.log.SLogService;
 import cn.wizzer.common.shiro.exception.EmptyCaptchaException;
 import cn.wizzer.common.shiro.exception.IncorrectCaptchaException;
@@ -133,10 +134,19 @@ public class SysLoginController {
             subject.login(token);
             Sys_user user = (Sys_user) subject.getPrincipal();
             int count = user.getLoginCount() == null ? 0 : user.getLoginCount();
-            sLogService.async(Sys_log.c("info", "用户登陆", "成功登录系统！", null));
             userService.update(Chain.make("loginIp", user.getLoginIp()).add("loginAt", (int) (System.currentTimeMillis() / 1000))
                             .add("loginCount", count + 1).add("isOnline", true)
                     , Cnd.where("id", "=", user.getId()));
+			Sys_log sysLog = new Sys_log();
+            sysLog.setType("info");
+            sysLog.setTag("用户登陆");
+            sysLog.setSrc(this.getClass().getName()+"#doLogin");
+            sysLog.setMsg("成功登录系统！");
+            sysLog.setIp(StringUtil.getRemoteAddr());
+            sysLog.setOpBy(user.getId());
+            sysLog.setOpAt((int) (System.currentTimeMillis() / 1000));
+            sysLog.setNickname(user.getNickname());
+            sLogService.async(sysLog);
             return Result.success("login.success");
         } catch (IncorrectCaptchaException e) {
             //自定义的验证码错误异常
@@ -171,7 +181,16 @@ public class SysLoginController {
             Subject currentUser = SecurityUtils.getSubject();
             Sys_user user = (Sys_user) currentUser.getPrincipal();
             currentUser.logout();
-            sLogService.sync(Sys_log.c("info", "用户登出", "退出系统！", null));
+            Sys_log sysLog = new Sys_log();
+            sysLog.setType("info");
+            sysLog.setTag("用户登出");
+            sysLog.setSrc(this.getClass().getName()+"#logout");
+            sysLog.setMsg("成功退出系统！");
+            sysLog.setIp(StringUtil.getRemoteAddr());
+            sysLog.setOpBy(user.getId());
+            sysLog.setOpAt((int) (System.currentTimeMillis() / 1000));
+            sysLog.setNickname(user.getNickname());
+            sLogService.async(sysLog);
             userService.update(Chain.make("isOnline", false), Cnd.where("id", "=", user.getId()));
         } catch (SessionException ise) {
             log.debug("Encountered session exception during logout.  This can generally safely be ignored.", ise);
